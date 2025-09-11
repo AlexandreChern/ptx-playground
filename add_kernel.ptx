@@ -1,0 +1,59 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+.visible .entry add_kernel (
+    // Kernel parameters passed from the host
+    .param .u64 in_a,
+    .param .u64 in_b,
+    .param .u64 out_c,
+    .param .u32 n
+)
+{
+    // Setup registers
+    .reg .b64   %rd<8>;                  // %rd for 64-bit addresses and pointers
+    .reg .b32   %r<2>;                   // %r for signed 32-bit integers
+    .reg .u32   %u<5>;                   // %u for unsigned 32-bit integers
+    .reg .f32   %f<4>;                   // %f for 32-bit floating point values
+    .reg .pred  %p<2>;                   // %p for predicates (booleans)
+
+    // Load kernel parameters into registers
+    ld.param.u64    %rd1, [in_a];        // %rd1 = base pointer for 'a'
+    ld.param.u64    %rd2, [in_b];        // %rd2 = base pointer for 'b'
+    ld.param.u64    %rd3, [out_c];       // %rd3 = base pointer for 'c'
+    ld.param.u32    %u1, [n];            // %u1 = size 'n'
+
+    // Move special register values to general registers to use them
+    mov.u32         %u2, %ctaid.x;       // %u2 = blockIdx.x
+    mov.u32         %u3, %ntid.x;        // %u3 = blockDim.x
+    mov.u32         %u4, %tid.x;         // %u4 = threadIdx.x
+
+    // Calculate the global thread ID by
+    // idx = blockIdx.x * blockDim.x + threadIdx.x
+    mad.lo.s32      %r1, %u2, %u3, %u4;  // %r1 = idx
+
+    // Terminate if idx >= n
+    setp.ge.s32     %p1, %r1, %u1;       // Set predicate %p1 if idx >= n
+    @%p1 bra        DONE;                // Branch to DONE if %p1 is true
+
+    // Compute how many bytes to offset for the current index,
+    // use 4 because we're dealing with 32-bit (4-byte) floats
+    mul.wide.s32    %rd4, %r1, 4;        // %rd4 = byte offset
+
+    // Calculate addresses for a[idx], b[idx], and c[idx]
+    // by using the base address + offset
+    add.s64         %rd5, %rd1, %rd4;    // %rd5 = address of a[idx]
+    add.s64         %rd6, %rd2, %rd4;    // %rd6 = address of b[idx]
+    add.s64         %rd7, %rd3, %rd4;    // %rd7 = address of c[idx]
+
+    // Load vector values at the target position
+    ld.global.f32   %f1, [%rd5];         // %f1 = a[idx]
+    ld.global.f32   %f2, [%rd6];         // %f2 = b[idx]
+
+    // Perform the addition and store the result
+    add.f32         %f3, %f1, %f2;       // %f3 = a[idx] + b[idx]
+    st.global.f32   [%rd7], %f3;         // c[idx] = %f3
+
+DONE:
+    ret;
+}
