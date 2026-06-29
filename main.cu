@@ -24,7 +24,8 @@ int main() {
   CUdevice device;
   CUDA_CHECK(cuDeviceGet(&device, 0));
   CUcontext context;
-  CUDA_CHECK(cuCtxCreate(&context, 0, device));
+  // CUDA_CHECK(cuCtxCreate(&context, 0, device));
+  CUDA_CHECK(cuCtxCreate(&context, nullptr, 0, device));
 
   // Load the PTX file
   std::ifstream ptx_file("add_kernel.ptx");
